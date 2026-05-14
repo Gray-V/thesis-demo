@@ -1,0 +1,87 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ccf6c18ee3e5749498ab1b2c2057784d, type: 3}
+  m_Name: RangedBoidSettings
+  m_EditorClassIdentifier: Assembly-CSharp::BoidSettings
+  flockType: 1
+  flockColor: {r: 0.079476655, g: 0.13032828, b: 0.8867924, a: 1}
+  minSpeed: 2
+  maxSpeed: 5
+  maxSteerForce: 3
+  perceptionRadius: 2.5
+  avoidanceRadius: 1
+  separationWeight: 1.5
+  alignmentWeight: 1
+  cohesionWeight: 1
+  crossFlockSeparationWeight: 2
+  obstacleAvoidanceWeight: 10
+  obstacleAvoidanceRadius: 1.5
+  obstacleMask:
+    serializedVersion: 2
+    m_Bits: 128
+  boundaryRadius: 30
+  boundaryTurnStrength: 5
+  flockSize: 50
+  spawnRadius: 5
+  targetFollowSpeed: 3
+  targetStopDistance: 10
+  targetSlowDistance: 8
+  aggroRadius: 15
+  aggroTag: Player
+  targetSeekWeight: 0
+  engageBoundaryRadius: 5
+  engageAvoidanceRadius: -1
+  targetKeepDistance: 3
+  groupUpThreshold: 0.7
+  maxHealth: 150
+  attackDamage: 10
+  attackCooldown: 1.5
+  minSurvivorFraction: 0.35
+  fleeHealthThreshold: 0.3
+  fleeSpeedMultiplier: 1.3
+  scatterDuration: 3
+  regroupCohesionMultiplier: 3
+  flankAngleDegrees: 60
+  flockAttackTriggerDistance: 12
+  formationRingRadius: 5
+  formationDuration: 2
+  formationConvergeThreshold: 0.7
+  formationSlotTolerance: 1.5
+  formationApproachSpeed: 8
+  flockAttackCooldown: 5
+  flockProjectileDamage: 30
+  projectileSpeed: 15
+  projectilePrefab: {fileID: 7260620750771843444, guid: 64a36cd4dc0de7e4f9da246bc9553c3c, type: 3}
+  projectileTurnSpeed: 5
+  formationOrbitSpeed: 90
+  formationKnockbackForce: 8
+  attackTriggerDistance: 4
+  attackWindUpDuration: 0.4
+  attackWindUpDistance: 2
+  attackChargeDuration: 0.25
+  attackChargeSpeed: 20
+  attackSweepDuration: 0.8
+  attackContactDistance: 1.5
+  maxSimultaneousAttackers: 3
+  meleeFlockTriggerDistance: 8
+  meleeFlockCooldown: 4
+  meleeRecoveryDuration: 0.5
+  meleeWindUpSteerWeight: 5
+  meleeChargeSteerWeight: 10
+  isolationThreshold: 20
+  regroupRadius: 8
+  criticalHealthThreshold: 0.15
+  scatterSpeedMultiplier: 1.5
+  kiteMinDistance: 8
+  kiteMaxDistance: 15
+  guardInnerRange: 15
+  guardOuterRange: 30

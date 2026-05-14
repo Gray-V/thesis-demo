@@ -1,0 +1,27 @@
+{
+    "name": "PlayModeTests",
+    "rootNamespace": "",
+    "references": [
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "GameScripts",
+        "CrashKonijn.Agent.Core",
+        "CrashKonijn.Agent.Runtime",
+        "CrashKonijn.Goap.Core",
+        "CrashKonijn.Goap.Resolver",
+        "CrashKonijn.Goap.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

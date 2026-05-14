@@ -1,0 +1,20 @@
+{
+    "name": "GameScripts",
+    "rootNamespace": "",
+    "references": [
+        "CrashKonijn.Agent.Core",
+        "CrashKonijn.Agent.Runtime",
+        "CrashKonijn.Goap.Core",
+        "CrashKonijn.Goap.Resolver",
+        "CrashKonijn.Goap.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
