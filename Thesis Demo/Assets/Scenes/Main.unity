@@ -10872,7 +10872,7 @@ MonoBehaviour:
   comparisonHPPerFlock: 3000
   spawnedAgents: []
   goapBehaviour: {fileID: 1516552613}
-  playerTransform: {fileID: 0}
+  playerTransform: {fileID: 654671317}
 --- !u!4 &852203329
 Transform:
   m_ObjectHideFlags: 0
