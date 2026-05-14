@@ -10,7 +10,7 @@ Material:
   m_Name: New Material
   m_Shader: {fileID: -6465566751694194690, guid: 7e131fdc59d1b5940b62682c32958b72, type: 3}
   m_Parent: {fileID: 2100000, guid: 31e23c8453cccc548b31c9eaab801b26, type: 2}
-  m_ModifiedSerializedProperties: 0
+  m_ModifiedSerializedProperties: 8
   m_ValidKeywords: []
   m_InvalidKeywords:
   - _DISABLE_SSR_TRANSPARENT
