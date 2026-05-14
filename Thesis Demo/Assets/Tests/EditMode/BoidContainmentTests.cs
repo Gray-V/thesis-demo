@@ -11,6 +11,9 @@ using UnityEngine;
 ///   - <see cref="BoidAgent.ApplyKnockback"/>       — Y-impulse clamp
 ///   - <see cref="BoidAgent.ComputeOverlapEscape"/> — math half of the
 ///     OverlapSphere inside-collider recovery probe
+///   - <see cref="BoidAgent.GetEscapeReference"/>   — collider-type-safe
+///     reference point for the recovery probe (must not throw on non-convex
+///     MeshColliders / TerrainColliders)
 ///
 /// The Physics.OverlapSphereNonAlloc call itself is verified end-to-end by the
 /// PlayMode containment smoke (no boid drops below y=0.4 in a 60s N=200 trial),
@@ -157,5 +160,49 @@ public class BoidContainmentTests
         // NaN-propagating through normalized.
         Vector3 escape = BoidAgent.ComputeOverlapEscape(Vector3.zero, 3f, 10f);
         Assert.AreEqual(Vector3.zero, escape);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // GetEscapeReference — collider-type-safe reference point for the recovery
+    // probe. Regression net for the showcase-breaking bug where ClosestPoint
+    // threw every frame against the scene's non-convex Environment MeshColliders.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Test]
+    public void EscapeReference_ConvexCollider_UsesClosestPoint()
+    {
+        // BoxCollider supports ClosestPoint — a point outside the box must
+        // resolve to a point ON the box surface, not the AABB center.
+        var go = GameObject.CreatePrimitive(PrimitiveType.Cube); // 1x1x1 BoxCollider at origin
+        var box = go.GetComponent<BoxCollider>();
+
+        Vector3 reference = BoidAgent.GetEscapeReference(box, new Vector3(5f, 0f, 0f));
+
+        Assert.AreEqual(0.5f, reference.x, 1e-4f, "ClosestPoint must land on the +X face of the unit cube.");
+        Assert.AreEqual(0f, reference.y, 1e-4f);
+        Assert.AreEqual(0f, reference.z, 1e-4f);
+
+        Object.DestroyImmediate(go);
+    }
+
+    [Test]
+    public void EscapeReference_NonConvexMeshCollider_DoesNotThrowAndUsesBoundsCenter()
+    {
+        // The exact crash scenario: a non-convex MeshCollider. Collider.ClosestPoint
+        // throws for these; GetEscapeReference must instead fall back to the AABB
+        // center without throwing.
+        var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        Object.DestroyImmediate(go.GetComponent<BoxCollider>());
+        var mesh = go.AddComponent<MeshCollider>();
+        mesh.convex = false;
+
+        Vector3 reference = Vector3.zero;
+        Assert.DoesNotThrow(
+            () => reference = BoidAgent.GetEscapeReference(mesh, new Vector3(5f, 0f, 0f)),
+            "Non-convex MeshCollider must not reach Collider.ClosestPoint.");
+        Assert.AreEqual(mesh.bounds.center, reference,
+            "Non-convex MeshCollider must fall back to the AABB center.");
+
+        Object.DestroyImmediate(go);
     }
 }

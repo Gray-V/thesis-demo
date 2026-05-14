@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class BoidAgent : MonoBehaviour, IEnemy
@@ -8,11 +9,22 @@ public class BoidAgent : MonoBehaviour, IEnemy
     public const float kFloorY = 0f;
     public const float kBoidGroundOffset = 0.5f;
 
-    // Static buffer for the OverlapSphereNonAlloc inside-collider recovery probe
-    // in ComputeObstacleAvoidance. Sized for the realistic worst case (a boid
-    // straddling two adjacent obstacles); larger overlaps just truncate, which
-    // is fine because the recovery only needs one collider to escape from.
-    private static readonly Collider[] sOverlapBuffer = new Collider[4];
+    // Static buffers for the obstacle-avoidance physics queries in
+    // ComputeObstacleAvoidance — no per-frame GC. The boid prefab carries a
+    // collider on the same "Environment" layer that obstacleMask targets, so
+    // every query also picks up fellow boids; the buffers must be large enough
+    // to hold several boids AND still surface the real geometry behind them
+    // (IsBoidCollider filters the boids out in code).
+    private static readonly Collider[] sOverlapBuffer = new Collider[16];
+    private static readonly RaycastHit[] sCastBuffer = new RaycastHit[16];
+
+    // Every live boid's own collider, for O(1) "is this hit a fellow boid?"
+    // checks in ComputeObstacleAvoidance. Populated in Awake, removed in
+    // OnDestroy. A HashSet lookup is far cheaper than a GetComponentInParent
+    // run per hit, per cast, per boid, per frame — that per-hit component walk
+    // was the source of the near-geometry lag spikes.
+    private static readonly HashSet<Collider> sBoidColliders = new HashSet<Collider>();
+    private Collider ownCollider;
 
     [HideInInspector] public BoidSettings settings;
     [HideInInspector] public FlockManager manager;
@@ -67,6 +79,15 @@ public class BoidAgent : MonoBehaviour, IEnemy
     private void Awake()
     {
         cachedTransform = transform;
+        ownCollider = GetComponent<Collider>();
+        if (ownCollider != null)
+            sBoidColliders.Add(ownCollider);
+    }
+
+    private void OnDestroy()
+    {
+        if (ownCollider != null)
+            sBoidColliders.Remove(ownCollider);
     }
 
     public void Initialize(Vector3 startVelocity)
@@ -74,9 +95,19 @@ public class BoidAgent : MonoBehaviour, IEnemy
         velocity = startVelocity;
     }
 
-    public void UpdateBoid(Vector3 separationHeading, Vector3 alignmentHeading, Vector3 cohesionCenter, int neighborCount, Vector3 crossFlockSeparation)
+    public void UpdateBoid(Vector3 separationHeading, Vector3 alignmentHeading, Vector3 cohesionCenter, int neighborCount, Vector3 crossFlockSeparation, bool debugLog = false)
     {
         Vector3 acceleration = Vector3.zero;
+
+        // Obstacle-avoidance steering — populated below and applied to velocity
+        // even during a GOAP movement override, so the leader cannot clip through
+        // walls mid-attack.
+        Vector3 obstacleAccel = Vector3.zero;
+
+        // Movement diagnostics — only populated when this boid is the sampled one
+        // (FlockManager passes debugLog=true for boids[0] on debug-tick frames).
+        Vector3 debugStartPos = debugLog ? cachedTransform.position : default;
+        Vector3 debugStartVel = debugLog ? velocity : default;
 
         // Suppress flocking and seek forces only during full movement override (ranged formation)
         if (!IsMovementOverridden)
@@ -200,7 +231,8 @@ public class BoidAgent : MonoBehaviour, IEnemy
         }
 
         // Obstacle avoidance
-        acceleration += ComputeObstacleAvoidance();
+        obstacleAccel = ComputeObstacleAvoidance();
+        acceleration += obstacleAccel;
 
         // Apply acceleration to velocity (skip during full movement override)
         if (!IsMovementOverridden)
@@ -227,6 +259,14 @@ public class BoidAgent : MonoBehaviour, IEnemy
                 velocity = velocity.normalized * speed;
             }
         }
+        else
+        {
+            // A GOAP action owns the primary trajectory (e.g. the leader's Attack/
+            // Flank/Kite), but obstacle avoidance still applies on top so it cannot
+            // clip straight through walls. The overlap-recovery term inside
+            // obstacleAccel also shoves it back out if it does penetrate geometry.
+            velocity += obstacleAccel * Time.deltaTime;
+        }
 
         // Move and orient
         cachedTransform.position += velocity * Time.deltaTime;
@@ -242,6 +282,22 @@ public class BoidAgent : MonoBehaviour, IEnemy
         if (velocity.sqrMagnitude > 0.001f)
         {
             cachedTransform.forward = velocity.normalized;
+        }
+
+        if (debugLog && FlockManager.MovementDebug)
+        {
+            Vector3 endPos = cachedTransform.position;
+            bool nan = float.IsNaN(velocity.x) || float.IsNaN(velocity.y) || float.IsNaN(velocity.z)
+                       || float.IsNaN(endPos.x) || float.IsNaN(endPos.y) || float.IsNaN(endPos.z);
+            Debug.Log(
+                $"[BoidDebug] {name} nbrs={neighborCount} state={manager.State} override={IsMovementOverridden}" +
+                $" | in: sep={separationHeading.magnitude:F2} align={alignmentHeading.magnitude:F2} coh={cohesionCenter.magnitude:F2} xflock={crossFlockSeparation.magnitude:F2}" +
+                $" | obstacleAccel={obstacleAccel.magnitude:F2} totalAccel={acceleration.magnitude:F2}" +
+                $" | spd {debugStartVel.magnitude:F2}->{velocity.magnitude:F2} (min={settings.minSpeed} max={settings.maxSpeed})" +
+                $" | moved={(endPos - debugStartPos).magnitude:F3} pos={endPos}" +
+                $" | dt={Time.deltaTime:F4} timeScale={Time.timeScale:F2}" +
+                (nan ? "  <<<<< NaN DETECTED" : ""),
+                this);
         }
     }
 
@@ -402,7 +458,7 @@ public class BoidAgent : MonoBehaviour, IEnemy
 
     private Vector3 ComputeBoundarySteer()
     {
-        Vector3 managerPos = manager.transform.position;
+        Vector3 managerPos = manager.AnchorPosition;
         Vector3 offset = cachedTransform.position - managerPos;
         float distance = offset.magnitude;
         float boundaryRadius = manager.EffectiveBoundaryRadius;
@@ -435,9 +491,19 @@ public class BoidAgent : MonoBehaviour, IEnemy
             settings.obstacleAvoidanceRadius * 0.5f,
             sOverlapBuffer,
             settings.obstacleMask);
-        if (overlapCount > 0)
+        Collider overlapObstacle = null;
+        for (int o = 0; o < overlapCount; o++)
         {
-            Vector3 closest = sOverlapBuffer[0].ClosestPoint(cachedTransform.position);
+            // Skip fellow boids — only real geometry counts as an obstacle.
+            if (!IsBoidCollider(sOverlapBuffer[o]))
+            {
+                overlapObstacle = sOverlapBuffer[o];
+                break;
+            }
+        }
+        if (overlapObstacle != null)
+        {
+            Vector3 closest = GetEscapeReference(overlapObstacle, cachedTransform.position);
             Vector3 outward = cachedTransform.position - closest;
             // Degenerate (cast origin coincides with closest point — center of a
             // box, etc.): push straight up so the boid escapes onto the obstacle
@@ -449,27 +515,89 @@ public class BoidAgent : MonoBehaviour, IEnemy
 
         Vector3 forward = cachedTransform.forward;
 
-        // Check if there's an obstacle ahead
-        if (!Physics.SphereCast(cachedTransform.position, settings.obstacleAvoidanceRadius, forward,
-                out RaycastHit hit, settings.perceptionRadius, settings.obstacleMask))
-        {
+        // Check if there's real geometry ahead
+        if (!ObstacleAhead(forward, out RaycastHit hit))
             return Vector3.zero;
-        }
 
         // Find the first unobstructed direction
         Vector3[] dirs = BoidHelper.Directions;
         for (int i = 0; i < dirs.Length; i++)
         {
             Vector3 worldDir = cachedTransform.TransformDirection(dirs[i]);
-            if (!Physics.SphereCast(cachedTransform.position, settings.obstacleAvoidanceRadius, worldDir,
-                    out RaycastHit _, settings.perceptionRadius, settings.obstacleMask))
-            {
+            if (!ObstacleAhead(worldDir, out RaycastHit _))
                 return SteerTowards(worldDir) * settings.obstacleAvoidanceWeight;
-            }
         }
 
         // All directions blocked — steer away from the hit
         return SteerTowards(-hit.normal) * settings.obstacleAvoidanceWeight;
+    }
+
+    /// <summary>
+    /// True when <paramref name="col"/> belongs to a boid rather than real
+    /// environment geometry (or is null). The boid prefab sits on the same
+    /// layer obstacleMask targets, so the physics queries in
+    /// ComputeObstacleAvoidance also catch fellow boids — but a boid is never an
+    /// obstacle. Same-flock spacing is the separation rule's job; treating boids
+    /// as obstacles makes every agent shove every neighbour at full obstacle
+    /// force (and, when a boid catches its own collider, launches it straight up
+    /// via the degenerate-escape fallback).
+    /// </summary>
+    private static bool IsBoidCollider(Collider col)
+    {
+        // O(1) set lookup — see sBoidColliders. Null counts as "skip" so a
+        // stale/destroyed hit is never treated as an obstacle.
+        return col == null || sBoidColliders.Contains(col);
+    }
+
+    /// <summary>
+    /// SphereCast along <paramref name="dir"/> that ignores fellow boids and
+    /// reports the nearest real-geometry hit. Returns false when the path is
+    /// clear of actual obstacles. Uses SphereCastNonAlloc + a static buffer so
+    /// there is no per-frame GC; like all SphereCasts it cannot detect colliders
+    /// the origin is already inside — that case is covered by the OverlapSphere
+    /// recovery probe above.
+    /// </summary>
+    private bool ObstacleAhead(Vector3 dir, out RaycastHit obstacleHit)
+    {
+        obstacleHit = default;
+        int n = Physics.SphereCastNonAlloc(
+            cachedTransform.position, settings.obstacleAvoidanceRadius, dir,
+            sCastBuffer, settings.perceptionRadius, settings.obstacleMask);
+
+        float nearest = float.MaxValue;
+        bool found = false;
+        for (int i = 0; i < n; i++)
+        {
+            if (IsBoidCollider(sCastBuffer[i].collider))
+                continue;
+            if (sCastBuffer[i].distance < nearest)
+            {
+                nearest = sCastBuffer[i].distance;
+                obstacleHit = sCastBuffer[i];
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Reference point the inside-collider recovery pushes away from.
+    /// Collider.ClosestPoint only supports Box/Sphere/Capsule/convex-Mesh
+    /// colliders — it THROWS for non-convex MeshColliders and TerrainColliders,
+    /// which is exactly what the scene's Environment geometry uses. For those,
+    /// fall back to the collider's AABB center: less precise than the true
+    /// surface point, but always valid and still a sensible "push outward"
+    /// anchor for escaping a penetrated obstacle. Public for EditMode tests.
+    /// </summary>
+    public static Vector3 GetEscapeReference(Collider collider, Vector3 position)
+    {
+        bool supportsClosestPoint =
+            !(collider is TerrainCollider)
+            && !(collider is MeshCollider mesh && !mesh.convex);
+
+        return supportsClosestPoint
+            ? collider.ClosestPoint(position)
+            : collider.bounds.center;
     }
 
     /// <summary>

@@ -103,6 +103,12 @@ public class FlockManager : MonoBehaviour
     public static bool DiagnosticLogging = false;
     private int lastLoggedTargetCount = int.MinValue;
 
+    // Movement diagnostics (defense-day debugging). When true, LateUpdate logs a
+    // per-flock summary plus a detailed trace of boids[0] roughly every 0.5s, all
+    // tagged [BoidDebug]. Flip this default to false to silence before a showcase.
+    public static bool MovementDebug = true;
+    private float movementDebugTimer;
+
     public bool IsDead => currentFlockHealth <= 0f;
     /// <summary>Max HP, honoring the ConditionManager override when set.</summary>
     public float EffectiveMaxHealth => maxHealthOverride > 0f
@@ -196,6 +202,22 @@ public class FlockManager : MonoBehaviour
         coordinator?.UnregisterFlock(this);
         Destroy(gameObject);
     }
+
+    /// <summary>
+    /// World point the flock's boundary steering is centered on. In the leader
+    /// condition this is the leader's LIVE position, so followers are kept within
+    /// boundaryRadius of the leader instead of the stale spawn point; otherwise it
+    /// is the manager transform (PureBOIDS drifts that via MoveAnchor).
+    ///
+    /// This MUST stay a computed property — never assign it back to
+    /// transform.position. The boids are parented to this transform, so writing
+    /// the parent drags every child boid (the leader included), and chasing the
+    /// leader's own position then becomes an exponential runaway.
+    /// </summary>
+    public Vector3 AnchorPosition =>
+        leaderBoid != null && leaderBoid.gameObject != null
+            ? leaderBoid.Position
+            : transform.position;
 
     public float EffectiveBoundaryRadius
     {
@@ -396,9 +418,12 @@ public class FlockManager : MonoBehaviour
                 UpdateMeleeFlockAttack();
         }
 
-        // Anchor movement — chase target for Engaging/Flanking/Guarding/Grouping,
-        // retreat for Fleeing/Kiting/Scattering, hold for Regrouping/Idle.
-        MoveAnchor();
+        // Anchor movement — PureBOIDS only. Chase target for Engaging/Flanking/
+        // Guarding/Grouping, retreat for Fleeing/Kiting/Scattering, hold otherwise.
+        // The leader condition does not move this transform at all; its boundary
+        // steering reads the leader's live position via AnchorPosition instead.
+        if (!useGoap)
+            MoveAnchor();
     }
 
     private void MoveAnchor()
@@ -690,6 +715,17 @@ public class FlockManager : MonoBehaviour
         float effectiveAvoidance = EffectiveAvoidanceRadius;
         float avoidanceSqr = effectiveAvoidance * effectiveAvoidance;
 
+        bool doDebug = false;
+        if (MovementDebug)
+        {
+            movementDebugTimer -= Time.deltaTime;
+            if (movementDebugTimer <= 0f)
+            {
+                doDebug = true;
+                movementDebugTimer = 0.5f;
+            }
+        }
+
         for (int i = 0; i < boids.Count; i++)
         {
             BoidAgent boid = boids[i];
@@ -722,8 +758,10 @@ public class FlockManager : MonoBehaviour
 
             // Leader influence model (revised 2026-05-06): followers always run STANDARD
             // BOIDS cohesion (toward neighbor centroid) when they have neighbors. When a
-            // leader exists, an additive directional bias toward the leader is layered on
-            // top, applied at unit length (NOT as the raw displacement vector) so the bias
+            // leader exists, an additive directional bias toward a leader-relative follow
+            // anchor (behind the leader when it moves, on the leader when it is still — see
+            // the hasLeader block below) is layered on top, applied at unit length (NOT as
+            // the raw displacement vector) so the bias
             // does not dominate the cohesion direction at long range. Without normalisation
             // a leader 30 m away with weight 0.3 produces a 9-unit addend that overwhelms a
             // 1-unit standard cohesion vector, defeating the "light influence" intent.
@@ -753,12 +791,30 @@ public class FlockManager : MonoBehaviour
 
             if (hasLeader)
             {
-                Vector3 toLeader = leaderBoid.Position - boid.Position;
-                if (toLeader.sqrMagnitude > 0.000001f)
+                // Followers trail BEHIND a moving leader and gather AROUND a near-
+                // stationary one. The follow anchor is the leader's position pushed
+                // backward along its heading; the offset scales with leader speed, so
+                // it shrinks to zero as the leader slows — cohesion plus mutual
+                // separation then settle the flock into a loose ring around the leader.
+                // trailDistance is the offset at full leader speed; raise it for a
+                // longer tail, lower it to keep followers tucked in close.
+                const float trailDistance = 4f;
+                Vector3 leaderVel   = leaderBoid.Velocity;
+                float   leaderSpeed = leaderVel.magnitude;
+
+                Vector3 followAnchor = leaderBoid.Position;
+                if (leaderSpeed > 0.01f)
+                {
+                    float trailLerp = Mathf.Clamp01(leaderSpeed / settings.maxSpeed);
+                    followAnchor -= (leaderVel / leaderSpeed) * (trailDistance * trailLerp);
+                }
+
+                Vector3 toAnchor = followAnchor - boid.Position;
+                if (toAnchor.sqrMagnitude > 0.000001f)
                 {
                     float strandedness = Mathf.Clamp01(1f - neighborCount / strandedNeighborCount);
                     float weight       = Mathf.Lerp(minLeaderWeight, maxLeaderWeight, strandedness);
-                    cohesionCenter    += weight * toLeader.normalized;
+                    cohesionCenter    += weight * toAnchor.normalized;
                 }
             }
 
@@ -775,7 +831,30 @@ public class FlockManager : MonoBehaviour
                 }
             }
 
-            boid.UpdateBoid(separationHeading, alignmentHeading, cohesionCenter, neighborCount, crossFlockSeparation);
+            // Isolate per-boid failures: an exception thrown inside one boid's
+            // UpdateBoid must not abort the loop and freeze every boid after it.
+            // The error is still logged so it stays diagnosable, never silent.
+            try
+            {
+                boid.UpdateBoid(separationHeading, alignmentHeading, cohesionCenter, neighborCount, crossFlockSeparation, doDebug && i == 0);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"BoidAgent.UpdateBoid failed for '{boid.name}': {e}", boid);
+            }
+        }
+
+        if (doDebug)
+        {
+            float avgSpeed = 0f;
+            for (int i = 0; i < boids.Count; i++)
+                avgSpeed += boids[i].Velocity.magnitude;
+            if (boids.Count > 0) avgSpeed /= boids.Count;
+            Debug.Log(
+                $"[BoidDebug] FLOCK {name} type={settings.flockType} state={state} boids={boids.Count}" +
+                $" target={(target != null ? target.name : "none")} avgSpeed={avgSpeed:F2}" +
+                $" center={GetFlockCenter()} anchor={transform.position}",
+                this);
         }
 
         // Diagnostic: leader-goal-change → first-follower-cohesion-cycle propagation.
