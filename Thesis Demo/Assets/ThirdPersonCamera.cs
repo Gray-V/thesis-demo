@@ -77,6 +77,6 @@ public class ThirdPersonCamera : MonoBehaviour
             smoothSpeed * Time.deltaTime
         );
 
-        transform.LookAt(target.position + Vector3.up * 1.5f);
+        transform.LookAt(target.position + Vector3.up * 0.3f);
     }
 }

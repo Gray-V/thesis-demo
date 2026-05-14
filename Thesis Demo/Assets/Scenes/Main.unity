@@ -1100,6 +1100,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 9578032, guid: 5563b2c1cf35cae4f8490dfea2d2aa41, type: 3}
+      propertyPath: m_Controller
+      value: 
+      objectReference: {fileID: 9100000, guid: cbd1db45c75e5b948a5befe9ecb80421, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -3454,7 +3458,7 @@ Transform:
   m_GameObject: {fileID: 329560492}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.174, y: 1.505, z: -0.037}
+  m_LocalPosition: {x: 0.174, y: 1.2, z: -0.037}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -8319,7 +8323,7 @@ MonoBehaviour:
   jumpHeight: 2
   gravity: -9.81
   groundCheck: {fileID: 830100622}
-  groundDistance: 0.4
+  groundDistance: 0.1
   groundMask:
     serializedVersion: 2
     m_Bits: 8
@@ -8347,7 +8351,7 @@ CharacterController:
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Center: {x: 0, y: 1, z: 0}
 --- !u!1 &660077912
 GameObject:
   m_ObjectHideFlags: 0
@@ -14535,8 +14539,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ThirdPersonCamera
   target: {fileID: 329560493}
-  offset: {x: 0, y: 2, z: -5}
-  sensitivity: 2
+  offset: {x: 0, y: 1.2, z: -4}
+  sensitivity: 12
   smoothSpeed: 10
   minPitch: -30
   maxPitch: 70
