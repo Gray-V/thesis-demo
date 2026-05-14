@@ -25,6 +25,18 @@ public class FlockManager : MonoBehaviour
     [SerializeField] private BoidSettings settings;
     [SerializeField] private GameObject boidPrefab;
 
+    [Header("Window Layout")]
+    [Tooltip("Width of the stained-glass window that this flock's shards collectively form.")]
+    [SerializeField] private float windowWidth  = 0f;
+    [Tooltip("Height of the stained-glass window that this flock's shards collectively form.")]
+    [SerializeField] private float windowHeight = 0f;
+    [Tooltip("Seed for the fracture pattern. Change to get a different shard layout.")]
+    [SerializeField] private int   fractureSeed = 42;
+
+    [Header("Shard Material")]
+    [Tooltip("Shared material applied to every shard. Populated automatically by ImageToGlassPipeline.")]
+    [SerializeField] private Material shardMaterial;
+
     [Header("Debug")]
     [SerializeField] private bool drawGizmos = true;
 
@@ -88,6 +100,38 @@ public class FlockManager : MonoBehaviour
     /// dedicated method (and so EditMode tests can poke it directly).
     /// </summary>
     public float pendingFollowerReactTime = -1f;
+
+    public float WindowWidth  => windowWidth;
+    public float WindowHeight => windowHeight;
+
+    /// <summary>
+    /// Called by ImageToGlassPipeline in Awake() to bind window dimensions and fracture
+    /// seed before Start() spawns the flock. Boids will spawn in the XY plane of the
+    /// window rectangle instead of the default sphere when width > 0.
+    /// </summary>
+    public void SetWindowConfig(float width, float height, int seed)
+    {
+        windowWidth  = width;
+        windowHeight = height;
+        fractureSeed = seed;
+    }
+
+    /// <summary>
+    /// Called by ImageToGlassPipeline to supply a shared material (with the source
+    /// image applied) that overrides the per-boid colour set by ApplyFlockColor.
+    /// </summary>
+    public void SetShardMaterial(Material mat) => shardMaterial = mat;
+
+    public void Respawn(int count, Material mat)
+    {
+        for (int i = transform.childCount - 1; i >= 0; i--)
+            Destroy(transform.GetChild(i).gameObject);
+        boids.Clear();
+        foreignBoids.Clear();
+        flockSizeOverride = count;
+        shardMaterial     = mat;
+        SpawnFlock();
+    }
 
     // Number of scatter subgroups. Each boid is assigned a subgroupId in [0, count)
     // at spawn time (see SpawnFlock / AddBoids); ScatterDirectionPicker uses these
@@ -587,18 +631,47 @@ public class FlockManager : MonoBehaviour
         // Cache the GOAP behaviour lookup once, outside the per-boid loop.
         var goapBehaviour = FindFirstObjectByType<GoapBehaviour>();
 
+        // Pre-generate fracture layout so every boid gets a uniquely-shaped shard
+        // that fits flush with all its neighbours when assembled into the window.
         int flockSize = flockSizeOverride > 0 ? flockSizeOverride : settings.flockSize;
+        WindowFractureLayout.ShardData[] shards = null;
+        if (windowWidth > 0f && windowHeight > 0f && boidPrefab.GetComponent<GlassShardMesh>() != null)
+            shards = WindowFractureLayout.Generate(flockSize, windowWidth, windowHeight, fractureSeed);
+
         for (int i = 0; i < flockSize; i++)
         {
-            Vector3 spawnPos = transform.position + Random.insideUnitSphere * settings.spawnRadius;
-            Vector3 startVelocity = Random.onUnitSphere * settings.maxSpeed * 0.5f;
+            Vector3 spawnPos;
+            Vector3 startVelocity;
+            if (windowWidth > 0f && windowHeight > 0f)
+            {
+                float x = Random.Range(-windowWidth * 0.5f, windowWidth * 0.5f);
+                float y = Random.Range(-windowHeight * 0.5f, windowHeight * 0.5f);
+                spawnPos = transform.position + new Vector3(x, y, 0f);
+                Vector2 v = Random.insideUnitCircle.normalized;
+                startVelocity = new Vector3(v.x, v.y, 0f) * settings.maxSpeed * 0.5f;
+            }
+            else
+            {
+                spawnPos = transform.position + Random.insideUnitSphere * settings.spawnRadius;
+                startVelocity = Random.onUnitSphere * settings.maxSpeed * 0.5f;
+            }
 
             GameObject boidObj = Instantiate(boidPrefab, spawnPos, Quaternion.LookRotation(startVelocity), transform);
+
+            // Assign this boid's shard before Start() runs so the mesh is ready immediately.
+            if (shards != null)
+            {
+                GlassShardMesh glassMesh = boidObj.GetComponent<GlassShardMesh>();
+                if (glassMesh != null)
+                    glassMesh.Initialize(shards[i], windowWidth, windowHeight);
+            }
+
             BoidAgent agent = boidObj.GetComponent<BoidAgent>();
             agent.settings = settings;
             agent.manager = this;
             agent.subgroupId = i % ScatterSubgroupCount;
             agent.Initialize(startVelocity);
+            ApplyShardMaterial(boidObj);
             ApplyFlockColor(agent);
 
             // Phase 11 — GOAP agent-type wiring.
@@ -702,11 +775,25 @@ public class FlockManager : MonoBehaviour
         return n > 0 ? sum / n : fallback;
     }
 
+    private static readonly int FlockColorID = Shader.PropertyToID("_Color");
+
     private void ApplyFlockColor(BoidAgent boid)
     {
         Renderer renderer = boid.GetComponentInChildren<Renderer>();
-        if (renderer != null)
-            renderer.material.color = settings.flockColor;
+        if (renderer == null) return;
+        MaterialPropertyBlock mpb = new MaterialPropertyBlock();
+        renderer.GetPropertyBlock(mpb);
+        mpb.SetColor(FlockColorID, settings.flockColor);
+        renderer.SetPropertyBlock(mpb);
+    }
+
+    // Sets the shared shard material before ApplyFlockColor creates per-instance copies.
+    // Ensures each instance starts from the pipeline material (with the image texture).
+    private void ApplyShardMaterial(GameObject boidObj)
+    {
+        if (shardMaterial == null) return;
+        Renderer r = boidObj.GetComponentInChildren<Renderer>();
+        if (r != null) r.sharedMaterial = shardMaterial;
     }
 
     private void LateUpdate()

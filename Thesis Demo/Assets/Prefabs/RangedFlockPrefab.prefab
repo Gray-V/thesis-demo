@@ -52,6 +52,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 4198951854546033936, guid: 36b060e3487235642847cad857696d87, type: 3}
+      propertyPath: sourceImage
+      value: 
+      objectReference: {fileID: 2800000, guid: 79f81027a7754fd4794c730731f053a2, type: 3}
+    - target: {fileID: 4198951854546033936, guid: 36b060e3487235642847cad857696d87, type: 3}
+      propertyPath: shardMaterialTemplate
+      value: 
+      objectReference: {fileID: 2100000, guid: 31e23c8453cccc548b31c9eaab801b26, type: 2}
     - target: {fileID: 7139092808455683938, guid: 36b060e3487235642847cad857696d87, type: 3}
       propertyPath: m_Name
       value: RangedFlockPrefab

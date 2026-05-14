@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2590234590387694762}
   - component: {fileID: 2210516104637372663}
+  - component: {fileID: -4814700390243369707}
   m_Layer: 0
   m_Name: MeleeFlockPrefab
   m_TagString: Untagged
@@ -47,3 +48,22 @@ MonoBehaviour:
   settings: {fileID: 11400000, guid: d8a71b05d1383ae4eb0f1d84cf92afe2, type: 2}
   boidPrefab: {fileID: 1458949725028823893, guid: 8fdbaaea39014c3449e788a19463c4e3, type: 3}
   drawGizmos: 1
+  pendingFollowerReactTime: -1
+--- !u!114 &-4814700390243369707
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7139092808455683938}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f2cdd97f7821bcb4bb51e8e707e56489, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ImageToGlassPipeline
+  sourceImage: {fileID: 2800000, guid: 79f81027a7754fd4794c730731f053a2, type: 3}
+  windowScale: 10
+  fractureSeed: 42
+  shardMaterialTemplate: {fileID: 2100000, guid: 31e23c8453cccc548b31c9eaab801b26, type: 2}
+  flockManager: {fileID: 2210516104637372663}
+  backgroundPlaneRenderer: {fileID: 0}
