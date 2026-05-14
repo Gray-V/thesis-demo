@@ -1126,7 +1126,7 @@ GameObject:
   - component: {fileID: 127344959}
   - component: {fileID: 127344958}
   - component: {fileID: 127344957}
-  m_Layer: 7
+  m_Layer: 3
   m_Name: Floor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8317,13 +8317,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ThirdPersonPlayer
   cameraTransform: {fileID: 1106146402}
+  animator: {fileID: 1949216912}
   walkSpeed: 5
   sprintSpeed: 8
   rotationSpeed: 10
   jumpHeight: 2
   gravity: -9.81
   groundCheck: {fileID: 830100622}
-  groundDistance: 0.1
+  groundDistance: 0.45
   groundMask:
     serializedVersion: 2
     m_Bits: 8
@@ -10441,7 +10442,7 @@ Transform:
   m_GameObject: {fileID: 830100621}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.1, z: 0}
+  m_LocalPosition: {x: 0, y: -0.9, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -26655,6 +26656,11 @@ MonoBehaviour:
   blendDistance: 0
   weight: 1
   sharedProfile: {fileID: 11400000, guid: 10fc4df2da32a41aaa32d77bc913491c, type: 2}
+--- !u!95 &1949216912 stripped
+Animator:
+  m_CorrespondingSourceObject: {fileID: 9578032, guid: 5563b2c1cf35cae4f8490dfea2d2aa41, type: 3}
+  m_PrefabInstance: {fileID: 122281955}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1949667369
 GameObject:
   m_ObjectHideFlags: 0

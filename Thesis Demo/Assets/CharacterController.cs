@@ -5,6 +5,7 @@ public class ThirdPersonPlayer : MonoBehaviour
 {
     [Header("References")]
     public Transform cameraTransform;
+    public Animator animator;
 
     [Header("Movement")]
     public float walkSpeed = 5f;
@@ -17,7 +18,7 @@ public class ThirdPersonPlayer : MonoBehaviour
 
     [Header("Ground Check")]
     public Transform groundCheck;
-    public float groundDistance = 0.4f;
+    public float groundDistance = 0.3f;
     public LayerMask groundMask;
 
     private CharacterController controller;
@@ -32,36 +33,22 @@ public class ThirdPersonPlayer : MonoBehaviour
     private void Awake()
     {
         controller = GetComponent<CharacterController>();
-
         inputActions = new InputSystem_Actions();
 
-        // MOVE
         inputActions.Player.Move.performed += ctx =>
-        {
             moveInput = ctx.ReadValue<Vector2>();
-        };
 
         inputActions.Player.Move.canceled += ctx =>
-        {
             moveInput = Vector2.zero;
-        };
 
-        // JUMP
         inputActions.Player.Jump.performed += ctx =>
-        {
             Jump();
-        };
 
-        // SPRINT
         inputActions.Player.Sprint.performed += ctx =>
-        {
             isSprinting = true;
-        };
 
         inputActions.Player.Sprint.canceled += ctx =>
-        {
             isSprinting = false;
-        };
     }
 
     private void OnEnable()
@@ -77,15 +64,13 @@ public class ThirdPersonPlayer : MonoBehaviour
     private void Update()
     {
         GroundCheck();
-
         Move();
-
         ApplyGravity();
+        UpdateAnimations();
     }
 
     private void Move()
     {
-        // Camera-relative movement
         Vector3 forward = cameraTransform.forward;
         Vector3 right = cameraTransform.right;
 
@@ -99,11 +84,9 @@ public class ThirdPersonPlayer : MonoBehaviour
             forward * moveInput.y +
             right * moveInput.x;
 
-        // Rotate player toward movement
         if (moveDirection.magnitude > 0.1f)
         {
-            Quaternion targetRotation =
-                Quaternion.LookRotation(moveDirection);
+            Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
 
             transform.rotation = Quaternion.Slerp(
                 transform.rotation,
@@ -112,24 +95,17 @@ public class ThirdPersonPlayer : MonoBehaviour
             );
         }
 
-        // Sprint
-        float currentSpeed =
-            isSprinting ? sprintSpeed : walkSpeed;
+        float currentSpeed = isSprinting ? sprintSpeed : walkSpeed;
 
-        controller.Move(
-            moveDirection * currentSpeed * Time.deltaTime
-        );
+        controller.Move(moveDirection * currentSpeed * Time.deltaTime);
     }
 
     private void ApplyGravity()
     {
         if (isGrounded && velocity.y < 0)
-        {
             velocity.y = -2f;
-        }
 
         velocity.y += gravity * Time.deltaTime;
-
         controller.Move(velocity * Time.deltaTime);
     }
 
@@ -138,16 +114,33 @@ public class ThirdPersonPlayer : MonoBehaviour
         if (!isGrounded)
             return;
 
-        velocity.y =
-            Mathf.Sqrt(jumpHeight * -2f * gravity);
+        velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
     }
 
     private void GroundCheck()
     {
-        isGrounded = Physics.CheckSphere(
+        isGrounded = controller.isGrounded || Physics.CheckSphere(
             groundCheck.position,
             groundDistance,
             groundMask
         );
+    }
+
+    private void UpdateAnimations()
+    {
+        float inputMagnitude = moveInput.magnitude;
+
+        if (isSprinting && inputMagnitude > 0.1f)
+            inputMagnitude = 2f;
+
+        animator.SetFloat("InputHorizontal", moveInput.x, 0.1f, Time.deltaTime);
+        animator.SetFloat("InputVertical", moveInput.y, 0.1f, Time.deltaTime);
+        animator.SetFloat("InputMagnitude", inputMagnitude, 0.1f, Time.deltaTime);
+
+        animator.SetBool("IsGrounded", isGrounded);
+        animator.SetBool("IsStrafing", false);
+        animator.SetBool("IsSprinting", isSprinting && moveInput.magnitude > 0.1f);
+
+        animator.SetFloat("GroundDistance", isGrounded ? 0f : 1f);
     }
 }
